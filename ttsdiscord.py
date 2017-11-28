@@ -4,7 +4,7 @@ Created on Wed Nov 22 16:33:32 2017
 
 @author: User
 
-pretty much perfect except that you need to lift up shift before pressing enter 
+A script to enable automatic text-to-speech in Discord. Probably not optimal, but just a simple project to start off
 """
 
 import win32api
