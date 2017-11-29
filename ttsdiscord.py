@@ -4,7 +4,7 @@ Created on Wed Nov 22 16:33:32 2017
 
 @author: User
 
-pretty much perfect except that you need to lift up shift before pressing enter 
+Automatic tts in Discord
 """
 
 import win32api
@@ -14,7 +14,9 @@ import pyperclip
 import pyautogui
 
 #connect to discord
-hwnd = FindWindow(None, '#general - Discord')
+chatName = input('Enter your chat name (e.g. #general - Discord): ')
+hwnd = FindWindow(None, chatName)
+print(hwnd)
 app = pywinauto.Application()
 app.connect(handle = hwnd)
 dlg = app.top_window()
@@ -106,5 +108,4 @@ while True:
         print(sentence)
         
 '''
-
 '''
