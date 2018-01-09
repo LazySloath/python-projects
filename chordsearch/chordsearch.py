@@ -27,35 +27,38 @@ class ChordSearch(tkinter.Tk):
         self.entryVariable = tkinter.StringVar()
         # Entry field for song titles
         self.entry = tkinter.Entry(self, textvariable = self.entryVariable)
-        self.entry.grid(column = 0, row = 2, columnspan = 2, sticky = 'EW')
+        self.entry.grid(column = 0, row = 2, columnspan = 3, sticky = 'EW')
         self.entryVariable.set('Song title here')
         # Hook enter so that OnPressEnter occurs when enter is pressed
         self.entry.bind('<Return>', self.OnPressEnter)
-        
+        # Enter button
+        enter = tkinter.Button(self, text = 'Enter', 
+                                command = self.OnEnterClick)
+        enter.grid(column = 1, row = 3)
         # Save button
-        button = tkinter.Button(self, text = 'Save', 
-                                command = self.OnButtonClick)
-        button.grid(column = 1, row = 3)
+        save = tkinter.Button(self, text = 'Save', 
+                                command = self.OnSaveClick)
+        save.grid(column = 2, row = 3)
         
         # Label for instructions
         instruction = tkinter.Label(self, anchor = 'w', fg = 'white',
                                     bg = 'black', text = 'Enter a song title '
                                     + 'to search for chords or press the '
                                     + '"Save" button when done.')
-        instruction.grid(column = 0, row = 0, columnspan = 2, sticky = 'EW')
+        instruction.grid(column = 0, row = 0, columnspan = 3, sticky = 'EW')
         # Label for status
         self.labelVariable = tkinter.StringVar()
         label = tkinter.Label(self, textvariable = self.labelVariable,
                               anchor = 'w', fg = 'white', bg = 'grey')
-        label.grid(column = 0, row = 1, columnspan = 2, sticky = 'EW')
+        label.grid(column = 0, row = 1, columnspan = 3, sticky = 'EW')
         # Don't allow grid to resize
         self.grid_columnconfigure(0, weight = 1)
         self.resizable(False, False)
         # Don't allow auto grow and shrink for window
         self.update()
         self.geometry(self.geometry())
-            
-    def OnPressEnter(self, event):
+    
+    def OnEnterClick(self):
         # Get song title from entry field
         title = self.entryVariable.get()
         chords = song_search(title)
@@ -70,7 +73,10 @@ class ChordSearch(tkinter.Tk):
         self.entry.focus_set()
         self.entry.selection_range(0, tkinter.END)
         
-    def OnButtonClick(self):
+    def OnPressEnter(self, event):
+        self.OnEnterClick()
+        
+    def OnSaveClick(self):
         # Get user input for doc name then exit
         self.filepath = tkinter.filedialog.asksaveasfilename()
         app.destroy()
