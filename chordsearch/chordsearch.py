@@ -113,29 +113,35 @@ def add_chords(title, chords):
     # Title bold and underline
     p.add_run(title.upper()).bold = True
     p.runs[0].underline = True
+    # See if lines have \r appended to the back
+    has_return = '\r' in chords
+    # Clean up chords
+    if has_return:
+        chords = chords.split('\n')
     # Add chords
-    chordsheet.add_paragraph(chords)
+    p1 = chordsheet.add_paragraph()
+    for line in chords:
+        p1.add_run(line)
 
-
-# Initialise the chordsheet
-chordsheet = docx.Document()
-# Set 2 columns
-section = chordsheet.sections[0]
-cols = section._sectPr.xpath('./w:cols')[0]
-cols.set(docx.oxml.ns.qn('w:num'),'2')
-# Create document style
-style = chordsheet.styles['Normal']
-font = style.font
-font.name = 'Times New Roman'
-font.size = docx.shared.Pt(11)
-# Run GUI to let user get chords as required    
-app = ChordSearch(None)
-app.title('chordsearch')
-app.mainloop()
-# Save the chordsheet
-try:
-    if len(app.filepath) > 0:
-        chordsheet.save(app.filepath + '.docx')
-        print('Chords saved!')
-except AttributeError:
-    pass
+if __name__ == '__main__':
+    # Initialise the chordsheet
+    chordsheet = docx.Document()
+    # Set 2 columns
+    section = chordsheet.sections[0]
+    cols = section._sectPr.xpath('./w:cols')[0]
+    cols.set(docx.oxml.ns.qn('w:num'),'2')
+    # Create document style
+    style = chordsheet.styles['Normal']
+    font = style.font
+    font.name = 'Times New Roman'
+    font.size = docx.shared.Pt(11)
+    # Run GUI to let user get chords as required    
+    app = ChordSearch(None)
+    app.title('chordsearch')
+    app.mainloop()
+    # Save the chordsheet
+    try:
+        if len(app.filepath) > 0:
+            chordsheet.save(app.filepath + '.docx')
+    except AttributeError:
+        pass
