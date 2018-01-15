@@ -12,6 +12,7 @@ import tkinter, requests, bs4, docx, pptx
 import tkinter.filedialog
 from pptx.dml.color import RGBColor
 from pptx.util import Pt
+from pptx.enum.text import MSO_AUTO_SIZE
 
 class PptLyrics(tkinter.Tk):
     # Parent is its container
@@ -105,6 +106,7 @@ def song_search(title):
         try:
             href = hit.get('href')
             soup = soupify(href)
+            # Find plain div element (how azlyrics stores lyrics)
             content = soup.find('div', class_ = False, id = False)
             # If lyrics found
             if content != None:
@@ -142,19 +144,27 @@ def add_lyrics(title, lyriclist):
     # Iterate over lyriclist, '' demarcates new verse
     for line in lyriclist:
         if line == '':
-            slide = prs.slides.add_slide(layout)
-            title_frame = slide.placeholders[0].text_frame
-            title_frame.margin_bottom = 4000000
-            title_frame.text = title
+            slide = prs.slides.add_slide(titlecontent)
+            slide.placeholders[0].text = title
             text_frame = slide.placeholders[1].text_frame
             text_frame.clear()
-            text_frame.margin_bottom = 6500000
+            text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+            np = 0
         else:
-            p = text_frame.add_paragraph()
+            # Select nth paragraph to insert nth line
+            p = text_frame.paragraphs[np]
+            # Make bullet point invisible
+            emptyrun = p.add_run()
+            emptyrun.text = ' '
+            emptyrun.font.size = Pt(1)
+            emptyrun.font.color.rgb = RGBColor(255,255,255)
+            # Add line
             run = p.add_run()
             run.text = line
             run.font.size = Pt(32)
             run.font.color.rgb = RGBColor(0,0,0)
+            np += 1
+            text_frame.add_paragraph()
 
 
 def capitalise(title):
@@ -162,7 +172,7 @@ def capitalise(title):
     titlelist = []
     for word in title.split():
         try:
-            titlelist.append(word[0].upper() + word[1:])
+            titlelist.append(word[0].upper() + word[1:].lower())
         except IndexError:
             titlelist.append(word.upper())
     return ' '.join(titlelist)
@@ -170,9 +180,10 @@ def capitalise(title):
 # Initialise PPT
 prs = pptx.Presentation()
 # Set layout
-layout = prs.slide_layouts[0]
+titleslide = prs.slide_layouts[0]
+titlecontent = prs.slide_layouts[1]
 # Intro slide
-introslide = prs.slides.add_slide(layout)
+introslide = prs.slides.add_slide(titleslide)
 introslide.placeholders[0].text = 'Welcome to Cell :)'
 
 # Run GUI to let user get lyrics as required    
@@ -183,6 +194,5 @@ app.mainloop()
 try:
     if len(app.filepath) > 0:
         prs.save(app.filepath + '.pptx')
-        print('Ppt saved!')
 except AttributeError:
     pass
