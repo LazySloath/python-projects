@@ -6,6 +6,8 @@ Created on Mon Jan  8 13:11:27 2018
 
 Improved version of chordsheet generator with a GUI
 Added transpose function
+Added a function to view artist/title to confirm if correct song
+Added flat compatibility
 """
 
 import tkinter, requests, bs4, docx
@@ -34,11 +36,11 @@ class ChordSearch(tkinter.Tk):
         self.entry.bind('<Return>', self.OnPressEnter)
         # Enter button
         enter = tkinter.Button(self, text = 'Enter', 
-                                command = self.OnEnterClick)
+                               command = self.OnEnterClick)
         enter.grid(column = 3, row = 3)
         # Save button
         save = tkinter.Button(self, text = 'Save', 
-                                command = self.OnSaveClick)
+                              command = self.OnSaveClick)
         save.grid(column = 4, row = 3)
         # Up button
         up = tkinter.Button(self, text = '/\\', command = self.OnUpClick)
@@ -70,21 +72,34 @@ class ChordSearch(tkinter.Tk):
     def OnEnterClick(self):
         if self.state == 0:
             # Get song title from entry field
-            self.title = self.entryVariable.get()
-            self.title = capitalise(self.title)
-            self.chords = song_search(self.title)
+            entry = self.entryVariable.get()
+            entry = capitalise(entry)
+            self.songlist = song_search(entry)
             # No chords found
-            if self.chords == None:
-                self.labelVariable.set('No chords found for ' + self.title + '!')
+            if self.songlist == []:
+                self.labelVariable.set('No chords found for ' + entry + '!')
             # Chords found
             else:
-                self.key = get_key(self.chords)
-                self.instructionVariable.set('Toggle the arrows to transpose or '
-                                             + 'press "Enter" to continue.')
-                self.labelVariable.set('Song: {0} / Key: {1}'.format(self.title, self.key))
+                self.instructionVariable.set('Use the arrows to search for ' 
+                                             + 'the correct version and press ' 
+                                             + '"Enter" to continue.')
+                self.counter = 0
+                self.labelVariable.set(str(self.counter + 1) + ': '
+                                       + self.songlist[self.counter][0] + ' / ' 
+                                       + self.songlist[self.counter][1])
                 self.state = 1
                 
         elif self.state == 1:
+            # Allow for transposing
+            self.title = self.songlist[self.counter][1]
+            self.chords = self.songlist[self.counter][2]
+            self.key = get_key(self.chords)
+            self.instructionVariable.set('Use the arrows to transpose and '
+                                         + 'press "Enter" to continue.')
+            self.labelVariable.set('Song: {0} / Key: {1}'.format(self.title, self.key))
+            self.state = 2
+            
+        elif self.state == 2:
             add_chords(self.title, self.chords)
             self.state = 0
             self.labelVariable.set('Chords added for ' + self.title + '!')
@@ -106,7 +121,18 @@ class ChordSearch(tkinter.Tk):
     def OnUpClick(self):
         if self.state == 0:
             pass
+        
         elif self.state == 1:
+            # Scroll through versions
+            if self.counter == 0:
+                pass
+            else:
+                self.counter -= 1
+                self.labelVariable.set(str(self.counter + 1) + ': '
+                                       + self.songlist[self.counter][0] + ' / ' 
+                                       + self.songlist[self.counter][1])
+                
+        elif self.state == 2:
             # Transpose up
             transpose(self.chords)
             if self.key != 'unknown':
@@ -118,7 +144,18 @@ class ChordSearch(tkinter.Tk):
     def OnDownClick(self):
         if self.state == 0:
             pass
+        
         elif self.state == 1:
+            # Scroll through versions
+            if self.counter == len(self.songlist) - 1:
+                pass
+            else:
+                self.counter += 1
+                self.labelVariable.set(str(self.counter + 1) + ': '
+                                       + self.songlist[self.counter][0] + ' / ' 
+                                       + self.songlist[self.counter][1])
+                
+        elif self.state == 2:
             # Transpose down
             for i in range(11):
                 transpose(self.chords)
@@ -136,21 +173,45 @@ def soupify(link):
     return bs4.BeautifulSoup(res.text, 'lxml')
 
 def song_search(title):
-    """Search for song on ultimateguitar and return chords from top hit"""
+    """Search for song on ug, return list of tuples(singer, title, chords)"""
     
     ugsearch = ('https://www.ultimate-guitar.com/search.php?'
     'search_type=title&order=&value=' + title)
     ugsoup = soupify(ugsearch)
     # Get list 'hits' of search results
     hits = ugsoup.select('.search-version--link > a')
+    songlist = []
+    singers = []
     for hit in hits:
         href = hit.get('href')
-        soup = soupify(href)
-        content = soup.select('.js-tab-content')
-        # If chords found
-        if len(content) == 1:
-            return(content[0])
+        singer = get_singer(href)
+        if singer in singers:
+            pass
+        else:
+            # Tidy up singer name
+            singers.append(singer)
+            singer = singer.split('_')
+            singer = capitalise(' '.join(singer))
+            title = hit.getText()
+            # Tidy up title
+            title = title.strip()
+            soup = soupify(href)
+            try:
+                chords = soup.select('.js-tab-content')[0]
+                songlist.append((singer, title, chords))
+            except IndexError:
+                pass
+    return songlist
 
+def get_singer(href):
+    """Helper function for song_search, get singer name from href"""
+    # Cut out https://tabs.ultimate-guitar.com/tab/ from href
+    href = href[37:]
+    # Singer is before next '/' character
+    singer = href[0:href.index('/')]
+    return singer
+   
+    
 def capitalise(title):
     """Capitalise each word in the title"""
     
@@ -194,12 +255,18 @@ def get_key(chords):
     for i in range(len(letters)):
         letters[i] = letters[i].getText()
     simplechords = ['F', 'C', 'G', 'D', 'A', 'E', 'B']
+    # Check for F major
+    if in_letters(letters, 'F', 'C') and 'G' not in letters:
+        return 'F'
+    # Check for C to B major
     for i in range(6):
         if in_letters(letters, simplechords[i], simplechords[i+1]):
             return simplechords[i+1]
-    complexchords = ['A#', 'D#', 'G#', 'C#', 'F#', 'B']
+    # Check for flat majors
+    complexchords = ['A#', 'D#', 'G#', 'C#', 'F#', 'B', 'E']
     for i in range(5):
-        if in_letters(letters, complexchords[i], complexchords[i+1]):
+        if in_letters(letters, complexchords[i], complexchords[i+1]) and \
+        complexchords[i+2] not in letters:
             return complexchords[i]
     return 'unknown'
 
@@ -210,6 +277,19 @@ def transpose(chords):
     letterstext = letterssoup.copy()
     for i in range(len(letterstext)):
         letterstext[i] = letterstext[i].getText()
+    # Change flats to relative sharps
+    flats = ('Ab', 'Bb', 'Db', 'Eb', 'Gb')
+    relatives = ('G#', 'A#', 'C#', 'D#', 'F#')
+    for i in range(len(letterstext)):
+        for chord in flats:
+            if chord in letterstext[i]:
+                j = letterstext[i].index(chord)
+                chordportion = relatives[flats.index(chord)]
+                newchord = (letterstext[i][:j]
+                            + chordportion
+                            + letterstext[i][j+2:])
+                letterstext[i] = newchord
+    
     allchords = ('A', 'A#', 'B', 'C', 'C#', 'D', 
                  'D#', 'E', 'F', 'F#', 'G', 'G#', 'A') 
     sharps = ('A#', 'C#', 'D#', 'F#', 'G#')
