@@ -6,6 +6,13 @@ Created on Mon Jan  8 21:47:27 2018
 
 Powerpoint lyrics generator that scrapes azlyrics for lyrics
 to be implemented: more design choices
+Added function to review singer/title
+
+now
+IP BANNED D':
+still problems with whitespace
+design tools
+lines per slide? how to fix
 """
 
 import tkinter, requests, bs4, docx, pptx
@@ -31,29 +38,38 @@ class PptLyrics(tkinter.Tk):
         self.entryVariable = tkinter.StringVar()
         # Entry field for song titles
         self.entry = tkinter.Entry(self, textvariable = self.entryVariable)
-        self.entry.grid(column = 0, row = 2, columnspan = 3, sticky = 'EW')
+        self.entry.grid(column = 0, row = 2, columnspan = 5, sticky = 'EW')
         self.entryVariable.set('Song title here')
         # Hook enter so that OnPressEnter occurs when enter is pressed
         self.entry.bind('<Return>', self.OnPressEnter)
         # Enter button
         enter = tkinter.Button(self, text = 'Enter', 
                                 command = self.OnEnterClick)
-        enter.grid(column = 1, row = 3)
+        enter.grid(column = 3, row = 3)
         # Save button
         save = tkinter.Button(self, text = 'Save', 
                                 command = self.OnSaveClick)
-        save.grid(column = 2, row = 3)
+        save.grid(column = 4, row = 3)
+        # Up button
+        up = tkinter.Button(self, text = '/\\', command = self.OnUpClick)
+        up.grid(column = 1, row = 3)
+        # Down button
+        down = tkinter.Button(self, text = '\\/', command = self.OnDownClick)
+        down.grid(column = 2, row = 3)
         # Label for instructions
-        instruction = tkinter.Label(self, anchor = 'w', fg = 'white',
-                                    bg = 'black', text = 'Enter a song title '
+        self.instructionVariable = tkinter.StringVar()
+        instruction = tkinter.Label(self, anchor = 'w', 
+                                    fg = 'white', bg = 'black', 
+                                    textvariable = self.instructionVariable)
+        self.instructionVariable.set('Enter a song title '
                                     + 'to search for lyrics or press the '
                                     + '"Save" button when done.')
-        instruction.grid(column = 0, row = 0, columnspan = 3, sticky = 'EW')
+        instruction.grid(column = 0, row = 0, columnspan = 5, sticky = 'EW')
         # Label for status
         self.labelVariable = tkinter.StringVar()
         label = tkinter.Label(self, textvariable = self.labelVariable,
                               anchor = 'w', fg = 'white', bg = 'grey')
-        label.grid(column = 0, row = 1, columnspan = 3, sticky = 'EW')
+        label.grid(column = 0, row = 1, columnspan = 5, sticky = 'EW')
         # Don't allow grid to resize
         self.grid_columnconfigure(0, weight = 1)
         self.resizable(False, False)
@@ -62,17 +78,36 @@ class PptLyrics(tkinter.Tk):
         self.geometry(self.geometry())
             
     def OnEnterClick(self):
+        if self.state == 0:
         # Get song title from entry field
-        title = self.entryVariable.get()
-        lyrics = song_search(title)
-        # No lyrics found
-        if lyrics == None:
-            self.labelVariable.set('No lyrics found for ' + title + '!')
-        # Lyrics found
-        else:
+            title = self.entryVariable.get()
+            self.songlist = song_search(title)
+            # No lyrics found
+            if self.songlist == []:
+                self.labelVariable.set('No lyrics found for ' + title + '!')
+                # Lyrics found
+            else:
+                self.instructionVariable.set('Use the arrows to search for ' 
+                                             + 'the correct version and press ' 
+                                             + '"Enter" to continue.')
+                self.counter = 0
+                self.labelVariable.set(str(self.counter + 1) + ': '
+                                       + self.songlist[self.counter][0] + ' / ' 
+                                       + self.songlist[self.counter][1])
+                self.state = 1
+                
+        elif self.state == 1:
+            title = self.songlist[self.counter][1]
+            lyrics = self.songlist[self.counter][2].getText()
+            print(lyrics)
             lyriclist = cleanup(lyrics)
             add_lyrics(title, lyriclist)
             self.labelVariable.set('Lyrics added for ' + title + '!')
+            self.instructionVariable.set('Enter a song title '
+                                         + 'to search for lyrics or press the '
+                                         + '"Save" button when done.')
+            self.state = 0
+            
         # Auto keyboard focus on entry field
         self.entry.focus_set()
         self.entry.selection_range(0, tkinter.END)
@@ -84,41 +119,77 @@ class PptLyrics(tkinter.Tk):
         # Get user input for doc name then exit
         self.filepath = tkinter.filedialog.asksaveasfilename()
         app.destroy()
-
+        
+    def OnUpClick(self):
+        if self.state == 0:
+            pass
+        
+        elif self.state == 1:
+            # Scroll through versions
+            if self.counter == 0:
+                pass
+            else:
+                self.counter -= 1
+                self.labelVariable.set(str(self.counter + 1) + ': '
+                                       + self.songlist[self.counter][0] + ' / ' 
+                                       + self.songlist[self.counter][1])
+                
+            
+    def OnDownClick(self):
+        if self.state == 0:
+            pass
+        
+        elif self.state == 1:
+            # Scroll through versions
+            if self.counter == len(self.songlist) - 1:
+                pass
+            else:
+                self.counter += 1
+                self.labelVariable.set(str(self.counter + 1) + ': '
+                                       + self.songlist[self.counter][0] + ' / ' 
+                                       + self.songlist[self.counter][1])
+                 
 
 def soupify(link):
     """Create BeautifulSoup object from a link"""
     
     # Spoof user agent to prevent connection error
-    headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 6.0; WOW64; rv:24.0) Gecko/20100101 Firefox/24.0' }
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.0; WOW64; rv:24.0) Gecko/20100101 Firefox/24.0'}
+
     res = requests.get(link, headers = headers)
     res.raise_for_status
     return bs4.BeautifulSoup(res.text, 'lxml')
 
 def song_search(title):
-    """Search for song on azlyrics and return lyrics from top hit"""
+    """Search for song on azlyrics, return list of tuples(singer,title,lyrics)"""
     
     ugsearch = ('https://search.azlyrics.com/search.php?q=' + title)
     ugsoup = soupify(ugsearch)
     # Get list 'hits' of search results
     hits = ugsoup.select('td > a')
+    singers = ugsoup.select('td > b')
+    counter = 0
+    songlist = []
     for hit in hits:
-        try:
-            href = hit.get('href')
+        href = hit.get('href')
+        if 'https://www.azlyrics.com/lyrics/' in href:
+            title = hit.getText()
             soup = soupify(href)
             # Find plain div element (how azlyrics stores lyrics)
-            content = soup.find('div', class_ = False, id = False)
-            # If lyrics found
-            if content != None:
-                return content.getText()
-        except:
-            pass
-
+            lyrics = soup.find('div', class_ = False, id = False)
+            songlist.append((singers[counter].getText(), title, lyrics))
+            counter += 1
+            
+    return songlist
+    
 def cleanup(lyrics):
     """Clean up lyrics and return lyrics in list form"""
     
     lyriclist = lyrics.split('\n')
-    lyriclist.remove('\r')
+    try:
+        lyriclist.remove('\r')
+    except:
+        pass
     # Remove [verse]
     for line in lyriclist.copy():
         try:
@@ -143,7 +214,7 @@ def add_lyrics(title, lyriclist):
     title = capitalise(title)
     # Iterate over lyriclist, '' demarcates new verse
     for line in lyriclist:
-        if line == '':
+        if line == '' or np == 4:
             slide = prs.slides.add_slide(titlecontent)
             slide.placeholders[0].text = title
             text_frame = slide.placeholders[1].text_frame
@@ -177,22 +248,23 @@ def capitalise(title):
             titlelist.append(word.upper())
     return ' '.join(titlelist)
 
-# Initialise PPT
-prs = pptx.Presentation()
-# Set layout
-titleslide = prs.slide_layouts[0]
-titlecontent = prs.slide_layouts[1]
-# Intro slide
-introslide = prs.slides.add_slide(titleslide)
-introslide.placeholders[0].text = 'Welcome to Cell :)'
-
-# Run GUI to let user get lyrics as required    
-app = PptLyrics(None)
-app.title('EasiLyric')
-app.mainloop()
-# Save the chordsheet
-try:
-    if len(app.filepath) > 0:
-        prs.save(app.filepath + '.pptx')
-except AttributeError:
-    pass
+if __name__ == "__main__":
+    # Initialise PPT
+    prs = pptx.Presentation()
+    # Set layout
+    titleslide = prs.slide_layouts[0]
+    titlecontent = prs.slide_layouts[1]
+    # Intro slide
+    introslide = prs.slides.add_slide(titleslide)
+    introslide.placeholders[0].text = 'Welcome to Cell :)'
+    
+    # Run GUI to let user get lyrics as required    
+    app = PptLyrics(None)
+    app.title('EasiLyric')
+    app.mainloop()
+    # Save the chordsheet
+    try:
+        if len(app.filepath) > 0:
+            prs.save(app.filepath + '.pptx')
+    except AttributeError:
+        pass
