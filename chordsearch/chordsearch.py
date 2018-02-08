@@ -4,13 +4,10 @@ Created on Mon Jan  8 13:11:27 2018
 
 @author: User
 
-Improved version of chordsheet generator with a GUI
-Added transpose function
-Added a function to view artist/title to confirm if correct song
-Added flat compatibility
+new ultimate guitar webpage fml
 """
 
-import tkinter, requests, bs4, docx
+import tkinter, requests, bs4, docx, json, re
 import tkinter.filedialog
 
 class ChordSearch(tkinter.Tk):
@@ -74,9 +71,12 @@ class ChordSearch(tkinter.Tk):
             # Get song title from entry field
             entry = self.entryVariable.get()
             entry = capitalise(entry)
-            self.songlist = song_search(entry)
+            try:
+                self.songlist = song_search(entry)
+            except:
+                self.songlist = []
             # No chords found
-            if self.songlist == []:
+            if not self.songlist:
                 self.labelVariable.set('No chords found for ' + entry + '!')
             # Chords found
             else:
@@ -88,7 +88,8 @@ class ChordSearch(tkinter.Tk):
                                        + self.songlist[self.counter][0] + ' / ' 
                                        + self.songlist[self.counter][1])
                 self.state = 1
-                
+        
+        
         elif self.state == 1:
             # Allow for transposing
             self.title = self.songlist[self.counter][1]
@@ -134,7 +135,7 @@ class ChordSearch(tkinter.Tk):
                 
         elif self.state == 2:
             # Transpose up
-            transpose(self.chords)
+            self.chords = transpose(self.chords)
             if self.key != 'unknown':
                 allkeys = ('A', 'A#', 'B', 'C', 'C#', 'D', 
                            'D#', 'E', 'F', 'F#', 'G', 'G#', 'A')
@@ -158,7 +159,7 @@ class ChordSearch(tkinter.Tk):
         elif self.state == 2:
             # Transpose down
             for i in range(11):
-                transpose(self.chords)
+                self.chords = transpose(self.chords)
             if self.key != 'unknown':
                 allkeys = ('A', 'G#', 'G', 'F#', 'F', 'E', 
                              'D#', 'D', 'C#', 'C', 'B', 'A#', 'A')
@@ -176,41 +177,51 @@ def song_search(title):
     """Search for song on ug, return list of tuples(singer, title, chords)"""
     
     ugsearch = ('https://www.ultimate-guitar.com/search.php?'
-    'search_type=title&order=&value=' + title)
+    'search_type=title&value=' + title)
     ugsoup = soupify(ugsearch)
     # Get list 'hits' of search results
-    hits = ugsoup.select('.search-version--link > a')
+    rawhits = ugsoup.select('script')
+    n = 0
+    for rawhit in rawhits:
+        if 'window.UGAPP.store.page' in rawhit.getText():
+            break
+        n += 1
+    datastring = rawhits[n].string
+    datastring = datastring[31:]
+    data = json.loads(datastring)
+    subset = data['data']['results']
+    hits = []
+    for i in subset:
+        if 'id' in i.keys():
+            hits.append(i)
+        
     songlist = []
     singers = []
     for hit in hits:
-        href = hit.get('href')
-        singer = get_singer(href)
+        singer = hit['artist_name']
         if singer in singers:
             pass
         else:
-            # Tidy up singer name
-            singers.append(singer)
-            singer = singer.split('_')
-            singer = capitalise(' '.join(singer))
-            title = hit.getText()
-            # Tidy up title
-            title = title.strip()
+            href = hit['tab_url']
+            title = hit['song_name']
             soup = soupify(href)
             try:
-                chords = soup.select('.js-tab-content')[0]
+                rawhits = soup.select('script')
+                n = 0
+                for rawhit in rawhits:
+                    if 'window.UGAPP.store.page' in rawhit.getText():
+                        break
+                    n += 1
+                datastring = rawhits[n].string
+                datastring = datastring[31:]
+                data = json.loads(datastring)
+                chords = data['data']['tab_view']['wiki_tab']['content']
                 songlist.append((singer, title, chords))
-            except IndexError:
+                singers.append(singer)
+            except:
                 pass
-    return songlist
 
-def get_singer(href):
-    """Helper function for song_search, get singer name from href"""
-    # Cut out https://tabs.ultimate-guitar.com/tab/ from href
-    href = href[37:]
-    # Singer is before next '/' character
-    singer = href[0:href.index('/')]
-    return singer
-   
+    return songlist
     
 def capitalise(title):
     """Capitalise each word in the title"""
@@ -225,7 +236,7 @@ def capitalise(title):
 
 def add_chords(title, chords):
     """Add chords to the docx"""
-    chords = chords.getText()
+    #chords = chords.getText()
     # Add title on docx
     p = chordsheet.add_paragraph('')
     # Title bold and underline
@@ -238,8 +249,24 @@ def add_chords(title, chords):
         chords = chords.split('\n')
     # Add chords
     p1 = chordsheet.add_paragraph()
-    for line in chords:
-        p1.add_run(line)
+    if type(chords) is str:
+        chords = clean_chords(chords)
+    else:
+        chordstr = ''
+        for line in chords:
+            chordstr += line
+        chords = clean_chords(chordstr)
+    p1.add_run(chords)
+
+def clean_chords(chords):
+    """Clean chords of [ch], [/ch]"""
+    while '[ch]' in chords:
+        cleanindex = chords.index('[ch]')
+        chords = chords[:cleanindex] + chords[cleanindex + 4:]
+    while '[/ch]' in chords:
+        cleanindex = chords.index('[/ch]')
+        chords = chords[:cleanindex] + chords[cleanindex + 5:]
+    return chords
 
 def in_letters(letters, note1, note2):
     """Helper function for get_key. Determine if chosen notes are in chords"""
@@ -251,9 +278,13 @@ def in_letters(letters, note1, note2):
 def get_key(chords):
     """Get the key of chords"""
     
-    letters = chords.select('span')
-    for i in range(len(letters)):
-        letters[i] = letters[i].getText()
+    # Get indexes of [ch]
+    openindex = [m.end() for m in re.finditer('\[ch\]', chords)]
+    # Get index of [/ch]
+    closeindex = [m.start() for m in re.finditer('\[/ch\]', chords)]
+    letters = []
+    for i in range(len(openindex)):
+        letters.append(chords[openindex[i]:closeindex[i]])
     simplechords = ['F', 'C', 'G', 'D', 'A', 'E', 'B']
     # Check for F major
     if in_letters(letters, 'F', 'C') and 'G' not in letters:
@@ -272,51 +303,50 @@ def get_key(chords):
 
 def transpose(chords):
     """Transpose chords one semitone up"""
-    
-    letterssoup = chords.select('span')
-    letterstext = letterssoup.copy()
-    for i in range(len(letterstext)):
-        letterstext[i] = letterstext[i].getText()
+    # Get index of [ch]
+    openindex = [m.end() for m in re.finditer('\[ch\]', chords)]
+    # Get index of [/ch]
+    closeindex = [m.start() for m in re.finditer('\[/ch\]', chords)]
+    letters = []
+    for i in range(len(openindex)):
+        letters.append(chords[openindex[i]:closeindex[i]])
+    originalletters = letters.copy()
     # Change flats to relative sharps
     flats = ('Ab', 'Bb', 'Db', 'Eb', 'Gb')
     relatives = ('G#', 'A#', 'C#', 'D#', 'F#')
-    for i in range(len(letterstext)):
+    for i in range(len(letters)):
         for chord in flats:
-            if chord in letterstext[i]:
-                j = letterstext[i].index(chord)
-                chordportion = relatives[flats.index(chord)]
-                newchord = (letterstext[i][:j]
-                            + chordportion
-                            + letterstext[i][j+2:])
-                letterstext[i] = newchord
-    
+            if chord in letters[i]:
+                j = letters[i].index(chord)
+                letters[i] = letters[i].replace(letters[i][j:j+2], relatives[flats.index(chord)])
     allchords = ('A', 'A#', 'B', 'C', 'C#', 'D', 
                  'D#', 'E', 'F', 'F#', 'G', 'G#', 'A') 
     sharps = ('A#', 'C#', 'D#', 'F#', 'G#')
-    # Messy transpose function (try to optimise next time)
-    for i in range(len(letterstext)):
+
+    # Messy transpose function 
+    for i in range(len(letters)):
         normals = ['A', 'C', 'B', 'D', 'F', 'E', 'G']
         for chord in sharps:
-            if chord in letterstext[i]:
-                j = letterstext[i].index(chord)
-                chordportion = allchords[allchords.index(chord) + 1]
-                newchord = (letterstext[i][:j] 
-                            + chordportion
-                            + letterstext[i][j+2:])
-                letterstext[i] = newchord
+            if chord in letters[i]:
+                j = letters[i].index(chord)
+                newchord = allchords[allchords.index(chord) + 1]
+                letters[i] = letters[i].replace(letters[i][j:j+2], newchord)
                 # Prevent changing chord again
-                normals.remove(chordportion)
+                normals.remove(newchord)
         for chord in normals:
-            if chord in letterstext[i]:
-                j = letterstext[i].index(chord)
-                chordportion = allchords[allchords.index(chord) + 1]
-                newchord = (letterstext[i][:j] 
-                            + chordportion
-                            + letterstext[i][j+1:])
-                letterstext[i] = newchord
-    # Edit html directly
-    for i in range(len(letterssoup)):
-        letterssoup[i].string = letterstext[i]
+            if chord in letters[i]:
+                j = letters[i].index(chord)
+                letters[i] = letters[i].replace(letters[i][j], allchords[allchords.index(chord) + 1])  
+
+    # Edit chords
+    for i in range(len(letters)):
+        replaceat = openindex[i]
+        chord1 = originalletters[i]
+        chord2 = letters[i]
+        chords = chords[:replaceat] + chord2 + chords[replaceat + len(chord1):]
+        for j in range(len(openindex)):
+            openindex[j] += len(chord2) - len(chord1)
+    return chords
 
 if __name__ == '__main__':
     # Initialise the chordsheet
