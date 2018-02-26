@@ -4,7 +4,7 @@ Created on Mon Jan  8 13:11:27 2018
 
 @author: User
 
-new ultimate guitar webpage fml
+Updated to work with new ultimateguitar UI
 """
 
 import tkinter, requests, bs4, docx, json, re
@@ -71,10 +71,9 @@ class ChordSearch(tkinter.Tk):
             # Get song title from entry field
             entry = self.entryVariable.get()
             entry = capitalise(entry)
-            try:
-                self.songlist = song_search(entry)
-            except:
-                self.songlist = []
+            # LAter add TRY EXCEPT self.songlist = []
+            self.songlist = song_search(entry)
+            
             # No chords found
             if not self.songlist:
                 self.labelVariable.set('No chords found for ' + entry + '!')
@@ -187,14 +186,15 @@ def song_search(title):
             break
         n += 1
     datastring = rawhits[n].string
-    datastring = datastring[31:]
+    # This part is messy and might need to be changed occasionally
+    cutoff = datastring.index('header_bidding')
+    datastring = datastring[31:cutoff - 2] + '}'
     data = json.loads(datastring)
     subset = data['data']['results']
     hits = []
     for i in subset:
         if 'id' in i.keys():
             hits.append(i)
-        
     songlist = []
     singers = []
     for hit in hits:
@@ -213,14 +213,15 @@ def song_search(title):
                         break
                     n += 1
                 datastring = rawhits[n].string
-                datastring = datastring[31:]
+                # As is this part
+                cutoff = datastring.index('revision_id')
+                datastring = datastring[31:cutoff - 2] + '}}}}'
                 data = json.loads(datastring)
                 chords = data['data']['tab_view']['wiki_tab']['content']
                 songlist.append((singer, title, chords))
                 singers.append(singer)
             except:
                 pass
-
     return songlist
     
 def capitalise(title):
