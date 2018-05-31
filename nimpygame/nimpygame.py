@@ -3,6 +3,10 @@
 Created on Fri May 25 20:34:16 2018
 
 @author: User
+
+what to improve:
+AI behaviour - if winning position, emulate players previous move for pairs
+different AI settings
 """
 
 import pygame
@@ -34,9 +38,10 @@ def main():
     pygame.init()
     FPSCLOCK = pygame.time.Clock()
     DISPLAYSURF = pygame.display.set_mode((WINDOWWIDTH, WINDOWHEIGHT))
-    
+    # Window settings
     pygame.display.set_caption('Nim')
-    rows = None
+    icon = pygame.image.load('nimpygame.png')
+    pygame.display.set_icon(icon)
     # Sounds
     pygame.mixer.music.load('bgm.mp3')
     pygame.mixer.music.set_volume(0.4)
@@ -51,6 +56,7 @@ def main():
     winSound.set_volume(0.1)
     # Main game loop
     while True:
+        rows = None
         multiplay = False
         if showStartScreen():
             rows = showRowSelect()
@@ -73,12 +79,14 @@ def runGame(rows):
     player1 = True
     error = False
     # Hacky way to get back button
-    back = displayGame(sticks,crossed,lines,player1,error)
+    back = displayGame(sticks,crossed,lines,player1,error,True)
     pygame.display.update()
     drawing = False
     while sticks:
         checkQuit()
         if not player1:
+            # Computer 'thinking'
+            pygame.time.delay(800)
             player1 = not player1
             line = analyse(sticks)
             for stick in sticks:
@@ -89,9 +97,17 @@ def runGame(rows):
                 if stick in sticks:
                     sticks.remove(stick)       
             lines.append(line)
-            displayGame(sticks,crossed,lines,player1,error)
+            # AI draw line animation
+            x,y = line.topleft
+            width = line.width
+            for i in range(width):
+                pygame.draw.line(DISPLAYSURF,RED,(x+i,y),(x+i,y+2))
+                pygame.display.update()
+                pygame.time.delay(2)
+            displayGame(sticks,crossed,lines,player1,error,True)
             swipeSound.play()
             pygame.display.update()
+            pygame.event.clear()
             
         else:
             for event in pygame.event.get():
@@ -124,20 +140,20 @@ def runGame(rows):
                                         sticks.remove(stick)
                                 player1 = not player1
                                 lines.append(line)
-                                displayGame(sticks,crossed,lines,player1,error)
+                                displayGame(sticks,crossed,lines,player1,error,True)
                                 swipeSound.play()
                                 pygame.display.update()
                             else:
                                 error = True
                                 whooshSound.play()
-                                displayGame(sticks,crossed,lines,player1,error)
+                                displayGame(sticks,crossed,lines,player1,error,True)
                                 pygame.display.update()
                                 error = False
                                 
                         else:
                             error = True
                             whooshSound.play()
-                            displayGame(sticks,crossed,lines,player1,error)
+                            displayGame(sticks,crossed,lines,player1,error,True)
                             pygame.display.update()
                             error = False
                             
@@ -145,7 +161,7 @@ def runGame(rows):
                     x,y = event.pos
                     drawing = True
                 elif event.type == MOUSEMOTION and drawing:
-                    displayGame(sticks,crossed,lines,player1,error)
+                    displayGame(sticks,crossed,lines,player1,error,True)
                     pygame.draw.line(DISPLAYSURF,RED,(x,y),
                                      (event.pos[0],y),3)
                     pygame.display.update()
@@ -250,7 +266,7 @@ def runGame2(rows):
                     buttonSound.play()
                     return
 
-def displayGame(sticks,crossed,lines,player1,error):
+def displayGame(sticks,crossed,lines,player1,error,AI=False):
     """Helper function to update display during runGame"""
     DISPLAYSURF.fill(WHITE)
     # Draw back button
@@ -259,8 +275,12 @@ def displayGame(sticks,crossed,lines,player1,error):
     if error:
         makeText(20,'Invalid move!',BLACK,GREY,500,0,140,30)
     # Draw player message
-    if player1:
+    if player1 and AI:
+        makeText(20,'Player to move',BLACK,GREY,240,0,160,30)
+    elif player1:
         makeText(20,'Player 1 to move',BLACK,GREY,240,0,160,30)
+    elif AI:
+        makeText(20,'AI to move',BLACK,GREY,240,0,160,30)
     else:
         makeText(20,'Player 2 to move',BLACK,GREY,240,0,160,30)
     # Draw sticks
@@ -271,7 +291,7 @@ def displayGame(sticks,crossed,lines,player1,error):
         pygame.draw.rect(DISPLAYSURF,DARKGREY,stick)
     # Draw lines
     for line in lines:
-        pygame.draw.rect(DISPLAYSURF,RED,line)
+        pygame.draw.rect(DISPLAYSURF,DARKGREY,line)
     return back
 
 def showStartScreen():
@@ -358,8 +378,11 @@ def makeText(fontsize,text,color,bgcolor,x,y,rwidth,rheight):
     twidth, theight = textSurf.get_size()
     textRect = pygame.Rect(x,y,rwidth,rheight)
     pygame.draw.rect(DISPLAYSURF,bgcolor,textRect)
+    #Draw border
+    pygame.draw.rect(DISPLAYSURF,DARKGREY,(x,y,rwidth,rheight),2)
     a,b = textRect.center
     DISPLAYSURF.blit(textSurf,(a-twidth/2, b-theight/2))
+    pygame.draw.rect(DISPLAYSURF,DARKGREY,(0,0,639,479),2)
     return textRect
 
 def checkQuit():
@@ -519,11 +542,4 @@ def nextpass(lengths,xy):
             return makemove(x,x1,y)
 
 if __name__ == '__main__':
-    """
-    sticks = []
-    for row in stickassets[:7]:
-        for pair in row:
-            sticks.append(pygame.Rect(pair[0],pair[1],3,40))
-    analyse(sticks)
-    """
     main()
