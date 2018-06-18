@@ -6,7 +6,10 @@ Created on Fri May 25 20:34:16 2018
 
 what to improve:
 AI behaviour - if winning position, emulate players previous move for pairs
+
 different AI settings
+
+start first or second
 """
 
 import pygame
@@ -25,15 +28,9 @@ DARKGREY = (180,180,180)
 RED = (255,0,0)
 BLUE = (0,0,255)
 
-stickassets = []
-for i in range(9):
-    row = []
-    for j in range(i):
-        row.append((340-i*20+j*40,20+i*50))
-    stickassets.append(row)
-
 def main():
-    global DISPLAYSURF,buttonSound,swipeSound,whooshSound,winSound,multiplay
+    global DISPLAYSURF, multiplay, stickassets
+    global buttonSound, swipeSound, whooshSound, winSound
     pygame.mixer.pre_init(44100, -16, 1, 512)
     pygame.init()
     FPSCLOCK = pygame.time.Clock()
@@ -54,21 +51,31 @@ def main():
     whooshSound.set_volume(0.1)
     winSound = pygame.mixer.Sound('win.wav')
     winSound.set_volume(0.1)
+    # Stick assets
+    stickassets = []
+    for i in range(9):
+        row = []
+        for j in range(i):
+            row.append((340-i*20+j*40,20+i*50))
+        stickassets.append(row)
     # Main game loop
     while True:
         rows = None
+        order = None
         multiplay = False
         if showStartScreen():
             rows = showRowSelect()
             if rows and multiplay:
                 runGame2(rows)
             elif rows:
-                runGame(rows)
+                order = showOrder()
+                if order:
+                    runGame(rows,order)
         else:
             showRules()
         
 
-def runGame(rows):
+def runGame(rows,order):
     """Game logic"""
     lines = []
     sticks = []
@@ -76,7 +83,12 @@ def runGame(rows):
     for row in stickassets[:rows+1]:
         for pair in row:
             sticks.append(pygame.Rect(pair[0],pair[1],3,40))
-    player1 = True
+    # Start second
+    if order == 2:
+        player1 = False
+    # Start first
+    else:
+        player1 = True
     error = False
     # Hacky way to get back button
     back = displayGame(sticks,crossed,lines,player1,error,True)
@@ -87,11 +99,10 @@ def runGame(rows):
         if not player1:
             # Computer 'thinking'
             pygame.time.delay(800)
-            player1 = not player1
+            player1 = True
             line = analyse(sticks)
             for stick in sticks:
                 if stick.colliderect(line):
-                    any_crossed += 1
                     crossed.append(stick)
             for stick in crossed:
                 if stick in sticks:
@@ -138,7 +149,7 @@ def runGame(rows):
                                 for stick in crossed:
                                     if stick in sticks:
                                         sticks.remove(stick)
-                                player1 = not player1
+                                player1 = False
                                 lines.append(line)
                                 displayGame(sticks,crossed,lines,player1,error,True)
                                 swipeSound.play()
@@ -181,7 +192,7 @@ def runGame(rows):
                     return
                 
 def runGame2(rows):
-    """Game logic"""
+    """2-player game logic"""
     lines = []
     sticks = []
     crossed = []
@@ -348,7 +359,6 @@ def showRowSelect():
                 for rect in numberRects:
                     if rect.collidepoint(event.pos):
                         buttonSound.play()
-                        pygame.display.update()
                         return numberRects.index(rect) + 3
 
 def showRules():
@@ -371,6 +381,28 @@ def showRules():
                 if checkBack(back,event.pos):
                     buttonSound.play()
                     return
+
+def showOrder():
+    """Screen for turn order"""
+    DISPLAYSURF.fill(WHITE)
+    # Make back button
+    back = makeBack()
+    makeText(20,'Choose who moves first',BLACK,GREY,200,0,240,30)
+    orderRects = []
+    orderRects.append(makeText(30,'Player',BLACK,GREY,200,190,100,100))
+    orderRects.append(makeText(30,'AI',BLACK,GREY,340,190,100,100))
+    pygame.display.update()
+    while True:
+        checkQuit()
+        for event in pygame.event.get():
+            if event.type == MOUSEBUTTONUP:
+                if checkBack(back,event.pos):
+                    buttonSound.play()
+                    return
+                for rect in orderRects:
+                    if rect.collidepoint(event.pos):
+                        buttonSound.play()
+                        return orderRects.index(rect) + 1
     
 def makeText(fontsize,text,color,bgcolor,x,y,rwidth,rheight):
     """Helper function to make text boxes"""
